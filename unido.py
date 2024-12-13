@@ -39,6 +39,8 @@ def load_data():
 
 # Função para gerar cores para tamanhos de 1 a 10
 def get_color_for_size(size):
+    if size == 0:
+        return 'rgba(255, 255, 255, 0.0)'
     colors = [
         '#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', 
         '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4'
@@ -77,18 +79,49 @@ else:
 # Definindo o DataFrame e variável com base no tipo de análise
 if tipo_analise == 'Fluxo':
     df = fluxo_df
-    variaveis_disponiveis = ['weighted indegree', 'weighted outdegree', 'weighted degree']
+    variaveis_disponiveis = [
+        'indegree', 'outdegree', 'degree',
+        'weighted indegree', 'weighted outdegree', 'weighted degree',
+        'Eccentricity', 'closnesscentrality', 'harmonicclosnesscentrality',
+        'betweenesscentrality', 'modularity_class'
+    ]
 elif tipo_analise == 'Saldo':
     df = saldo_df
-    variaveis_disponiveis = ['weighted indegree', 'weighted outdegree', 'weighted degree']
+    variaveis_disponiveis = [
+        'indegree', 'outdegree', 'degree',
+        'weighted indegree', 'weighted outdegree', 'weighted degree',
+        'Eccentricity', 'closnesscentrality', 'harmonicclosnesscentrality',
+        'betweenesscentrality', 'modularity_class'
+    ]
 else:  # Migrantes
-    df = fluxo_df  # ou saldo_df, dependendo da sua preferência
-    variaveis_disponiveis = ['indegree', 'outdegree', 'degree']
+    df = fluxo_df
+    variaveis_disponiveis = [
+        'indegree', 'outdegree', 'degree',
+        'weighted indegree', 'weighted outdegree', 'weighted degree',
+        'Eccentricity', 'closnesscentrality', 'harmonicclosnesscentrality',
+        'betweenesscentrality', 'modularity_class'
+    ]
 
-# Seleção da variável
+# Adicionando descrições das variáveis
+descricoes_variaveis = {
+    'indegree': 'Número de conexões de entrada',
+    'outdegree': 'Número de conexões de saída',
+    'degree': 'Número total de conexões',
+    'weighted indegree': 'Soma dos pesos das conexões de entrada',
+    'weighted outdegree': 'Soma dos pesos das conexões de saída',
+    'weighted degree': 'Soma total dos pesos das conexões',
+    'Eccentricity': 'Distância máxima do nó para qualquer outro nó',
+    'closnesscentrality': 'Proximidade média do nó a todos os outros nós',
+    'harmonicclosnesscentrality': 'Média harmônica das distâncias aos outros nós',
+    'betweenesscentrality': 'Frequência com que o nó aparece no caminho mais curto entre outros nós',
+    'modularity_class': 'Grupo de comunidade ao qual o nó pertence'
+}
+
+# Seleção da variável com descrição
 variavel_selecionada = st.sidebar.selectbox(
     'Variável:',
-    variaveis_disponiveis
+    variaveis_disponiveis,
+    format_func=lambda x: f"{x}: {descricoes_variaveis[x]}"
 )
 
 # Filtrando os dados
@@ -99,6 +132,9 @@ df_filtrado = df[
 
 # Criando o mapa
 st.subheader(f'Mapa de {tipo_analise} - {variavel_selecionada} ({ano_selecionado})')
+
+# Adicionando descrição da variável selecionada
+st.markdown(f"**Descrição da variável:** {descricoes_variaveis[variavel_selecionada]}")
 
 # Calculando os intervalos para as cores
 var_col = variavel_selecionada
@@ -115,16 +151,21 @@ m = folium.Map(
 
 # Adicionando os círculos ao mapa
 for idx, row in df_filtrado.iterrows():
-    size = np.interp(row[var_col], [min_val, max_val], [5, 50])
-    color_size = int(np.interp(row[var_col], [min_val, max_val], [1, 10]))
+    if row[var_col] == 0:
+        size = 3  # Tamanho pequeno para zero
+        color = 'rgba(0, 0, 0, 0.3)'  # Preto transparente
+    else:
+        size = np.interp(row[var_col], [min_val, max_val], [5, 50])
+        color_size = int(np.interp(row[var_col], [min_val, max_val], [1, 10]))
+        color = get_color_for_size(color_size)
     
     folium.CircleMarker(
         location=[row['Latitude'], row['Longitude']],
         radius=size,
         popup=f"{row['nome_municipio']} - {row['UF']}<br>{variavel_selecionada}: {row[var_col]:.2f}",
-        color=get_color_for_size(color_size),
+        color=color,
         fill=True,
-        fill_color=get_color_for_size(color_size)
+        fill_color=color
     ).add_to(m)
 
 # Exibindo o mapa
@@ -132,6 +173,18 @@ folium_static(m)
 
 # Legenda
 st.subheader('Legenda')
+
+# Adicionando o valor zero na legenda
+st.markdown(
+    '<div style="display: flex; align-items: center; margin-bottom: 10px;">'
+    '<div style="background-color: rgba(0, 0, 0, 0.3); width: 10px; height: 10px; '
+    'margin-right: 10px; border-radius: 50%; display: inline-block;"></div>'
+    '<span>Valor Zero</span></div>',
+    unsafe_allow_html=True
+)
+
+st.markdown('---')
+
 col1, col2 = st.columns(2)
 
 with col1:
@@ -139,19 +192,10 @@ with col1:
         interval_min = min_val + (size-1) * (max_val - min_val) / 10
         interval_max = min_val + size * (max_val - min_val) / 10
         st.markdown(
-            f"""
-            <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                <div style="
-                    background-color: {get_color_for_size(size)};
-                    width: 20px;
-                    height: 20px;
-                    margin-right: 10px;
-                    border-radius: 50%;
-                    display: inline-block;
-                "></div>
-                <span>Tamanho {size}: [{interval_min:.2f}, {interval_max:.2f}]</span>
-            </div>
-            """,
+            '<div style="display: flex; align-items: center; margin-bottom: 10px;">'
+            f'<div style="background-color: {get_color_for_size(size)}; width: 20px; height: 20px; '
+            'margin-right: 10px; border-radius: 50%; display: inline-block;"></div>'
+            f'<span>Valores entre [{interval_min:.2f}, {interval_max:.2f}]</span></div>',
             unsafe_allow_html=True
         )
 
@@ -160,38 +204,16 @@ with col2:
         interval_min = min_val + (size-1) * (max_val - min_val) / 10
         interval_max = min_val + size * (max_val - min_val) / 10
         st.markdown(
-            f"""
-            <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                <div style="
-                    background-color: {get_color_for_size(size)};
-                    width: 20px;
-                    height: 20px;
-                    margin-right: 10px;
-                    border-radius: 50%;
-                    display: inline-block;
-                "></div>
-                <span>Tamanho {size}: [{interval_min:.2f}, {interval_max:.2f}]</span>
-            </div>
-            """,
+            '<div style="display: flex; align-items: center; margin-bottom: 10px;">'
+            f'<div style="background-color: {get_color_for_size(size)}; width: 20px; height: 20px; '
+            'margin-right: 10px; border-radius: 50%; display: inline-block;"></div>'
+            f'<span>Valores entre [{interval_min:.2f}, {interval_max:.2f}]</span></div>',
             unsafe_allow_html=True
-        )
+        )# Estatísticas descritivas
+st.subheader('Estatísticas Descritivas')
+st.dataframe(df_filtrado[var_col].describe())
 
-# Métricas
-st.markdown('---')
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric('Municípios', len(df_filtrado))
-with col2:
-    st.metric(f'Média {variavel_selecionada}', f"{float(df_filtrado[var_col].mean()):.2f}")
-with col3:
-    st.metric(f'Máximo {variavel_selecionada}', f"{float(df_filtrado[var_col].max()):.2f}")
-
-# Tabela
-st.subheader('Dados Detalhados')
-colunas_exibir = ['nome_municipio', 'UF', var_col]
-st.dataframe(df_filtrado[colunas_exibir].sort_values(by=var_col, ascending=False))
-
-# Footer personalizado com a logo da UNEMAT/CNPQ
+# Footer personalizado com a logo da UNEMAT
 logo_base64 = get_base64_encoded_image('combined_logos.png')
 
 st.markdown(
